@@ -177,3 +177,21 @@ def test_graph_attempt_cap_stops_a_persistent_incomplete(monkeypatch, fake_chat)
     assert s["documents"] == [("AMD.txt", "a"), ("NVDA.txt", "n")]
     # hybrid 1 + (plan 1 + execute 1) x2 + answer 1; route 1 + diagnose 3
     assert (s["chat_calls"], s["decision_calls"], s["attempts"]) == (6, 4, 3)
+
+
+# ------------------------------------------------------------- the agent's tool call
+
+def test_search_filings_question_keeps_company_and_year():
+    # The outer model writes the tool argument. Without a description it
+    # sometimes shortens the question and drops the fiscal year, so the
+    # filter can only pin the company.
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+    spec = convert_to_openai_tool(A.search_filings)["function"]["parameters"]
+    described = spec["properties"]["question"].get("description", "").lower()
+    assert "company" in described and "fiscal year" in described
+    assert "earlier turns" in described
+
+
+def test_system_prompt_says_the_search_filters_on_company_and_year():
+    prompt = A.SYSTEM_PROMPT.lower()
+    assert "search_filings" in prompt and "fiscal year" in prompt and "filters" in prompt

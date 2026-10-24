@@ -306,7 +306,10 @@ def ask(question, verbose=False):
 # the financials file behind financial_fact, and a checkpointer so the chat
 # remembers the conversation. agentui.py streams it, tool calls and all.
 
-def search_filings(question: str) -> str:
+def search_filings(question: Annotated[str, (
+        "One standalone question. Keep the user's wording and every company name "
+        "and fiscal year they gave; for a follow-up, fill in the company and fiscal "
+        "year from earlier turns. The search filters on them.")]) -> str:
     """Answer a question from the text of the 10-K filings of NVIDIA, AMD and
     Micron: business, risk factors, management's discussion. Returns an answer
     with the filing each fact came from in brackets. Use financial_fact instead
@@ -317,7 +320,10 @@ def search_filings(question: str) -> str:
 SYSTEM_PROMPT = """You answer questions about NVIDIA, AMD and Micron from their
 10-K filings. Use search_filings for anything the filings say in prose, and
 financial_fact for a reported number. Relay the tool's answer, with its
-citations, and do not add facts of your own. If the tools find nothing, say so."""
+citations, and do not add facts of your own. If the tools find nothing, say so.
+When you call search_filings, pass the user's question with every company and
+fiscal year it names; the search filters on them. For a follow-up, fill in the
+company and fiscal year from earlier turns."""
 
 
 def build_agent():
