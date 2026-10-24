@@ -31,7 +31,7 @@ Deploying is `DEPLOY.md`.
 ## Submission
 
 ```
-Deployed app: <your Render URL>
+Deployed app: https://dada2-sec-filings-agent-kushal-krishnappa.onrender.com/
 ```
 
 ADD YOUR NAME TO YOUR RENDER PROJECT SO THE LINK CAN BE PERSONALIZED.
