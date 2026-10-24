@@ -1,7 +1,7 @@
 # Render Blueprint. New + > Blueprint, point it at your repo, and it reads this.
 services:
   - type: web
-    name: sec-filings-agent
+    name: dada2-sec-filings-agent
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -16,6 +16,8 @@ services:
       - key: PINECONE_API_KEY
         sync: false
       - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID   # skips the account lookup, which the token may not be allowed
         sync: false
       - key: COHERE_API_KEY
         sync: false
