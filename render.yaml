@@ -1,7 +1,7 @@
 # Render Blueprint. New + > Blueprint, point it at your repo, and it reads this.
 services:
   - type: web
-    name: dada2-sec-filings-agent
+    name: dada2-sec-filings-agent-kushal-krishnappa
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
