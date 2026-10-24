@@ -61,6 +61,9 @@ EMBED_BATCH = 64          # larger batches make Ollama drop the connection
 # a minute and 500 a day. An evaluation run over 14 questions times 5
 # strategies is well over 100 calls, so pace it.
 CHAT_MODEL = "gemini-3.5-flash-lite"
+# Seconds per request to Gemini; a timed-out request is retried. Calls here take
+# 1 to 3 s, but with no timeout one stalled request spins the app forever.
+CHAT_TIMEOUT = 60
 
 # Retrieval
 K = 5                     # passages handed to the model
@@ -102,7 +105,7 @@ def chat():
         from langchain_ollama import ChatOllama
         return ChatOllama(model=OLLAMA_CHAT_MODEL, reasoning=False)
     from langchain_google_genai import ChatGoogleGenerativeAI
-    return ChatGoogleGenerativeAI(model=CHAT_MODEL)
+    return ChatGoogleGenerativeAI(model=CHAT_MODEL, timeout=CHAT_TIMEOUT)
 
 
 # Cloudflare Workers AI, for the decision model in notebook 03. Both come from
