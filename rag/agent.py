@@ -86,14 +86,14 @@ def route(state: RetrievalState) -> dict:
     is the line. Count the call: return decision_calls as 1.
     """
     # TODO 3.1
-    # your code here
-    raise NotImplementedError
+    scope, probs = decision.scope(state["question"])
+    strategy = START_WITH[scope] if probs[scope] >= SURE else DEFAULT
+    return {"scope": scope, "strategy": strategy, "decision_calls": 1}
 
 def after_route(state: RetrievalState) -> Literal["lookup", "retrieve"]:
     """Figure questions do not go to retrieval at all."""
     # TODO 3.1
-    # your code here
-    raise NotImplementedError
+    return "lookup" if state["scope"] == "figure" else "retrieve"
 
 class Fact(BaseModel):
     """Which figure a question asks for."""
@@ -133,9 +133,13 @@ def lookup(state: RetrievalState) -> dict:
     table as the one document, with the verdict already sufficient so the
     graph goes straight to answer. attempts 1, chat_calls 1.
     """
-    # TODO 3.2
-    # your code here
-    raise NotImplementedError
+    # TODO 3.2 — FACT_PROMPT rather than the bare one-line prompt: it maps
+    # AMD's revenue to the concept AMD actually reports under.
+    namer = config.chat().with_structured_output(Fact)
+    fact = retry(namer.invoke, FACT_PROMPT.format(question=state["question"]))
+    table = financial_fact(fact.ticker, fact.concept)
+    return {"documents": [(f"{fact.ticker}_financials.json", table)],
+            "verdict": "sufficient", "attempts": 1, "chat_calls": 1}
 
 def retrieve(state: RetrievalState) -> dict:
     search = retrieval.STRATEGIES[state["strategy"]]
@@ -158,26 +162,34 @@ def diagnose(state: RetrievalState) -> dict:
     left, call it wrong_words instead and let the graph search once more.
     Count the call.
     """
-    # TODO 3.3
-    # your code here
-    raise NotImplementedError
+    # TODO 3.3  (diagnose)
+    verdict, probs = decision.diagnose(state["question"], state.get("documents") or [])
+    if (verdict == "absent" and probs.get("absent", 0) < ABSENT_SURE
+            and state.get("attempts", 0) < MAX_ATTEMPTS):
+        verdict = "wrong_words"
+    return {"verdict": verdict, "probabilities": probs, "decision_calls": 1}
 
 def decide(state: RetrievalState) -> Literal["answer", "stronger", "plan"]:
     """Every verdict has one place to go. sufficient and absent both stop.
     incomplete needs a plan. wrong_words needs a stronger search, unless there
     is none left. And the attempt cap stops everything."""
-    # TODO 3.3
-    # your code here
-    raise NotImplementedError
+    # TODO 3.3  (decide)
+    verdict = state["verdict"]
+    if verdict in ("sufficient", "absent"):
+        return "answer"
+    if state.get("attempts", 0) >= MAX_ATTEMPTS:
+        return "answer"
+    if verdict == "incomplete":
+        return "plan"
+    return "stronger" if state["strategy"] in STRONGER else "answer"
 
 def stronger(state: RetrievalState) -> dict:
     """Same question, the next search up. STRONGER says which.
 
     TODO 3.4 (2 pts), with plan, execute and build_graph.
     """
-    # TODO 3.4
-    # your code here
-    raise NotImplementedError
+    # TODO 3.4  (stronger)
+    return {"strategy": STRONGER[state["strategy"]]}
 
 class Plan(BaseModel):
     """The separate questions a comparative question breaks into."""
@@ -202,9 +214,12 @@ def plan(state: RetrievalState) -> dict:
     planner does not ask for it again. The sources of the documents in state
     are enough for that.
     """
-    # TODO 3.4
-    # your code here
-    raise NotImplementedError
+    # TODO 3.4  (plan)
+    planner = config.chat().with_structured_output(Plan)
+    covered = ", ".join(sorted({source for source, _ in state.get("documents") or []}))
+    out = retry(planner.invoke, PLAN_PROMPT.format(question=state["question"],
+                                                   covered=covered or "nothing"))
+    return {"steps": out.steps, "chat_calls": 1}
 
 def execute(state: RetrievalState) -> dict:
     """One filtered search per step. The filter extractor is a chat call each.
@@ -212,9 +227,16 @@ def execute(state: RetrievalState) -> dict:
     Append only passages you do not already have. documents has an add
     reducer, so return the new ones and the graph does the appending.
     """
-    # TODO 3.4
-    # your code here
-    raise NotImplementedError
+    # TODO 3.4  (execute)
+    seen = set(state.get("documents") or [])
+    new = []
+    for step in state["steps"]:
+        for hit in retrieval.with_filter(step, config.K):
+            if hit not in seen:
+                seen.add(hit)
+                new.append(hit)
+    return {"documents": new, "attempts": state.get("attempts", 0) + 1,
+            "chat_calls": len(state["steps"])}
 
 ANSWER_PROMPT = """Answer the question using only these passages from SEC
 filings. Cite the filing each fact comes from, by its filename in brackets.
@@ -240,9 +262,27 @@ def build_graph():
     after_route return Literals, which declare their edges."""
     from langgraph.graph import StateGraph, START, END
 
-    # TODO 3.4
-    # your code here
-    raise NotImplementedError
+    # TODO 3.4  (build_graph)
+    graph = StateGraph(RetrievalState)
+    graph.add_node("route", route)
+    graph.add_node("lookup", lookup)
+    graph.add_node("retrieve", retrieve)
+    graph.add_node("diagnose", diagnose)
+    graph.add_node("stronger", stronger)
+    graph.add_node("plan", plan)
+    graph.add_node("execute", execute)
+    graph.add_node("answer", answer)
+
+    graph.add_edge(START, "route")
+    graph.add_conditional_edges("route", after_route)
+    graph.add_edge("lookup", "answer")
+    graph.add_edge("retrieve", "diagnose")
+    graph.add_conditional_edges("diagnose", decide)
+    graph.add_edge("stronger", "retrieve")
+    graph.add_edge("plan", "execute")
+    graph.add_edge("execute", "diagnose")
+    graph.add_edge("answer", END)
+    return graph.compile()
 
 def run(question):
     """The whole final state, for tracing and for notebook 04's accounting."""
